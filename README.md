@@ -1,2 +1,2 @@
-# DecisionTree
-DecisionTree implementation using ID3 algorithm
+This is a machine learning library developed by Sergio Remigio
+for CS5350/6350 in University of Utah
