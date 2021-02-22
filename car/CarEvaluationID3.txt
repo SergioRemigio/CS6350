@@ -1,0 +1,120 @@
+import csv
+
+allAttributesWithValues = {
+"buying": ["vhigh", "high", "med", "low"],
+"maint": ["vhigh", "high", "med", "low"],
+"doors": ["2", "3", "4", "5more"],
+"persons": ["2", "4", "more"],
+"lug_boot": ["small", "med", "big"],
+"safety": ["low", "med", "high"]
+}
+
+class Tree:
+    def __init__(self):
+        self.children = list()
+        self.data = None
+        self.branch = None
+
+
+def importExamples():
+    examplesSet = list()
+
+    with open('train.csv', 'r') as f:
+        for line in f:
+            terms = line.strip().split(',')
+            examplesSet.append(terms)
+    return examplesSet
+
+def predictLabel(set):
+    allLabels = list(('unacc', 'acc', 'good', 'vgood'))
+    prediction = 'unacc'
+
+    for label in allLabels:
+        allSame = True
+        for example in set:
+            if example[6] != label:
+                allSame = False
+                break
+        if allSame == True:
+            prediction = label
+            break
+    return prediction
+
+def checkAllSameLabel(examplesSet, label):
+    for example in examplesSet:
+        if example[6] != label:
+            return False
+    return True
+
+def findMostCommonLabel():
+    return 'acc'
+
+def findBestAttributeToSplitOn(examplesSet, attributes):
+
+    return 'buying'
+
+def ID3Algorithm(examplesSet, label, attributes):
+    #if all examples have the same label
+    if checkAllSameLabel(examplesSet, label) == True:
+        #If attributes empty
+        if not attributes:
+            #Return a leaf node with the most common label
+            mostCommonLabel = findMostCommonLabel()
+            return mostCommonLabel
+
+        #else return a leaf node with the label
+        return label
+
+        print('all same label')
+        return
+
+    #Create a root node for tree
+    root = Tree()
+
+    A = findBestAttributeToSplitOn(examplesSet, attributes)
+    AColumn = list(allAttributesWithValues.keys()).index(A)
+    root.data = A
+
+    #For each possible value v of that A can take:
+    for value in allAttributesWithValues[A]:
+        child = Tree()
+        #Add a new tree branch corresponding to A=v
+        child.branch = value
+        root.children.append(child)
+
+        #Let Sv be the subset of examples in S with A = v
+        Sv = list()
+        for example in examplesSet:
+            if example[AColumn] == value:
+                Sv.append(example)
+
+        print(Sv)
+        print('---')
+
+        if not Sv:
+            #Add leaf node with the most common value of Label in S
+            print("add leaf node here")
+        else:
+            #Below this branch add the next subtree
+            labelPrediction = predictLabel(Sv)
+            #
+            #ID3(Sv, labelPrediction, attributes)
+
+
+def main():
+    list1 = ['low', 'vhigh', '4', '4', 'big', 'med', 'acc']
+    list2 = ['med', 'vhigh', '4', '4', 'big', 'med', 'good']
+    mlist = list()
+    mlist.append(list1)
+    mlist.append(list2)
+
+    attributes = ['buying', 'maint', 'doors', 'persons', 'lug_boot', 'safety']
+
+    examplesSet = importExamples()
+    labelPrediction = predictLabel(mlist)
+
+    ID3Algorithm(mlist, labelPrediction, attributes)
+
+    print(examplesSet[1][2])
+
+main()
