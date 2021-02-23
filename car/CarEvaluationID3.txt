@@ -1,3 +1,10 @@
+'''
+Author: Sergio Remigio
+Date: 2/22/2021
+
+This file contains the implementation of the ID3 algorithm
+for creating decision trees.
+'''
 import csv
 import math
 import copy
@@ -134,8 +141,6 @@ def findBestAttributeToSplitOnEntroypy(examplesSet, attributes):
         if gain > largestGain:
             largestGain = gain
             bestAttribute = attribute
-
-    print(bestAttribute)
     return bestAttribute
 
 '''
@@ -154,10 +159,10 @@ def findBestAttributeToSplitOnGini(examplesSet, attributes):
 
     return 'buying'
 
-def importExamples():
+def importExamples(file):
     examplesSet = list()
 
-    with open('train.csv', 'r') as f:
+    with open(file, 'r') as f:
         for line in f:
             terms = line.strip().split(',')
             examplesSet.append(terms)
@@ -302,31 +307,32 @@ def decisionTreePrediction(example, root, attributes):
             if child.branch == testValue:
                 return decisionTreePrediction(example, child.nextTree, attributes)
 
+def findAveragePredictionError(decisionTree, examplesSet, attributes):
+    totalCorrect = 0
+    for example in examplesSet:
+        actualResult = example[6]
+        prediction = decisionTreePrediction(example, decisionTree, attributes)
+        if prediction == actualResult:
+            totalCorrect = totalCorrect + 1
+
+    return totalCorrect / len(examplesSet)
+
+
 def main():
-    list1 = ['vhigh','high','3','2','big','low','unacc']
-    list2 = ['high', 'low', '4', '4', 'big', 'med', 'vgood']
-    list3 = ['high', 'low', '4', '4', 'big', 'med', 'vgood']
-    list4 = ['high', 'med', '4', '4', 'big', 'med', 'unacc']
-    list5 = ['high', 'low', '4', '4', 'big', 'med', 'vgood']
-
-
-    mlist = list()
-    mlist.append(list1)
-    mlist.append(list2)
-    mlist.append(list3)
-    mlist.append(list4)
-    mlist.append(list5)
-
-
     attributes = ['buying', 'maint', 'doors', 'persons', 'lug_boot', 'safety']
-    examplesSet = importExamples()
-    labelPrediction = predictLabel(mlist)
-    tree = ID3Algorithm(examplesSet, labelPrediction, attributes)
-    print(tree)
+    examplesSet = importExamples('train.csv')
+    labelPrediction = predictLabel(examplesSet)
 
-
-    print(decisionTreePrediction(list1, tree, attributes))
-
+    #Prints prediction data for every depth
+    for i in range(7):
+        global maximumTreeDepth
+        maximumTreeDepth = i
+        decisionTree = ID3Algorithm(examplesSet, labelPrediction, attributes)
+        print("Maximum tree depth: " + str(maximumTreeDepth))
+        print("Average prediction Error for Training Data:" +
+        str(findAveragePredictionError(decisionTree, examplesSet, attributes)))
+        print("Average prediction Error for Test Data: " +
+        str(findAveragePredictionError(decisionTree, importExamples('test.csv'), attributes)))
 
 
 main()
