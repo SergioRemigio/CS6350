@@ -1,4 +1,8 @@
 import csv
+import math
+import copy
+
+maximumTreeDepth = 6
 
 allAttributesWithValues = {
 "buying": ["vhigh", "high", "med", "low"],
@@ -9,12 +13,146 @@ allAttributesWithValues = {
 "safety": ["low", "med", "high"]
 }
 
+'''
+Children list is a list of all of the
+'''
 class Tree:
     def __init__(self):
         self.children = list()
-        self.data = None
+        self.attribute = None
         self.branch = None
+        self.nextTree = None
 
+'''
+Given a set, returns a list containing
+the probabilities of every label in order:
+1. "unacc"
+2. "acc"
+3. "good"
+4. "vgood"
+'''
+def findProbabilitiesOfLabels(examplesSet):
+
+    labelsCount = {
+    "unacc": 0,
+    "acc": 0,
+    "good": 0,
+    "vgood": 0,
+    }
+    probOfLabels = list()
+
+    if isinstance(examplesSet[0], list):
+        totalCount = len(examplesSet)
+
+        for example in examplesSet:
+            nextLabel = example[6]
+            labelsCount[nextLabel] += 1
+
+    #There is only one example in the set
+    else:
+        totalCount = 1
+        nextLabel = examplesSet[6]
+        labelsCount[nextLabel] += 1
+
+
+    for label in labelsCount.keys():
+        labelProbability = (labelsCount[label] / totalCount)
+        probOfLabels.append(labelProbability)
+
+    return probOfLabels
+
+'''
+Entropy{p1, p2, ..., pk} = -(\sum_{i=1}(pilog_4(pi)))
+where p = the probability of kth label
+(i.e., probability of "unacc", "acc".. etc.)
+'''
+def findEntropy(examplesSet):
+    pk = findProbabilitiesOfLabels(examplesSet)
+
+    result = 0
+    for p in pk:
+        if p != 0:
+            result = result + (p * math.log(p,4.0))
+
+    result = -result
+
+    return result
+
+'''
+Returns a Dictionary of size n attributes containing:
+A dictionary of values of a single attribute with a list of
+all example subsets for that attribute
+'''
+def getValueSubsetsForEveryAttribute(examplesSet, attributes):
+    dict = {}
+
+    #Loop through all of the examples for all attributes
+    #and fill dictionary in with subsets of all value examples
+    for i in range(6):
+        if attributes[i] != -1:
+            #Dictionary containing a subset(list of examples) for every value in attributes
+            valueSubSets = {}
+
+            #Create empty dictionary that will hold an attribute(key) and subset examples(value)
+            for value in allAttributesWithValues[attributes[i]]:
+                valueSubSets.update({value: list()})
+
+            #Fill the dictionary
+            for example in examplesSet:
+                valueSubSets[example[i]].append(example)
+
+            #update dict to return later
+            dict.update({attributes[i]: valueSubSets})
+
+    return dict
+
+
+'''
+Returns the best attribute to split the example set on
+using Entropy
+'''
+def findBestAttributeToSplitOnEntroypy(examplesSet, attributes):
+    currentEntropy = findEntropy(examplesSet)
+
+    listOfGainsToCalculate = getValueSubsetsForEveryAttribute(examplesSet, attributes)
+    largestGain = 0
+    bestAttribute = None
+    #Return a random attribute if all are the same
+    for x in range(6):
+        if attributes[x] != -1:
+            bestAttribute = attributes[x]
+
+    for attribute in listOfGainsToCalculate.keys():
+        gain = 0
+        for value in listOfGainsToCalculate[attribute].keys():
+            valueSubSet = listOfGainsToCalculate[attribute][value]
+            if not valueSubSet:
+                continue
+            gain = gain + findEntropy(valueSubSet)
+        #Return a random attribute if all atributes have 0 gain
+        gain = currentEntropy - gain
+        if gain > largestGain:
+            largestGain = gain
+            bestAttribute = attribute
+
+    print(bestAttribute)
+    return bestAttribute
+
+'''
+Returns the best attribute to split the example set on
+using Majority Error
+'''
+def findBestAttributeToSplitOnME(examplesSet, attributes):
+
+    return 'buying'
+
+'''
+Returns the best attribute to split the example set on
+using Gini Index
+'''
+def findBestAttributeToSplitOnGini(examplesSet, attributes):
+
+    return 'buying'
 
 def importExamples():
     examplesSet = list()
@@ -46,34 +184,72 @@ def checkAllSameLabel(examplesSet, label):
             return False
     return True
 
-def findMostCommonLabel():
-    return 'acc'
+'''
+Returns the most common label in the given examples.
+'''
+def findMostCommonLabelInS(examplesSet):
+    labelsCount = {
+    "unacc": 0,
+    "acc": 0,
+    "good": 0,
+    "vgood": 0,
+    }
 
-def findBestAttributeToSplitOn(examplesSet, attributes):
+    for example in examplesSet:
+        nextLabel = example[6]
+        labelsCount[nextLabel] += 1
 
-    return 'buying'
+    mostCommonLabel = "unacc"
+    for nextLabel in labelsCount.keys():
+        if labelsCount[mostCommonLabel] < labelsCount[nextLabel]:
+            mostCommonLabel = nextLabel
 
+    return mostCommonLabel
+
+'''
+Counts the number of -1 in the
+attributes list as that correlates to the
+the current tree depth
+'''
+def getTreeDepth(attributes):
+    depth = 0
+    for attribute in attributes:
+        if attribute == -1:
+            depth = depth + 1
+
+    return depth
+
+'''
+Decision tree algorithm
+s: the set of Examples
+Label: the target attribute(the prediction)
+Attributs: the set of measerude attributes
+'''
 def ID3Algorithm(examplesSet, label, attributes):
+    #Checks whether maximum depth has been reached
+    treeDepth = getTreeDepth(attributes)
+    if treeDepth == maximumTreeDepth:
+        #Return a leaf node with the most common label
+        leaf = findMostCommonLabelInS(examplesSet)
+        return leaf
+
     #if all examples have the same label
     if checkAllSameLabel(examplesSet, label) == True:
         #If attributes empty
         if not attributes:
             #Return a leaf node with the most common label
-            mostCommonLabel = findMostCommonLabel()
-            return mostCommonLabel
+            leaf = findMostCommonLabelInS(examplesSet)
+            return leaf
 
         #else return a leaf node with the label
         return label
 
-        print('all same label')
-        return
-
     #Create a root node for tree
     root = Tree()
 
-    A = findBestAttributeToSplitOn(examplesSet, attributes)
-    AColumn = list(allAttributesWithValues.keys()).index(A)
-    root.data = A
+    A = findBestAttributeToSplitOnEntroypy(examplesSet, attributes)
+    AttributeColumn = list(allAttributesWithValues.keys()).index(A)
+    root.attribute = A
 
     #For each possible value v of that A can take:
     for value in allAttributesWithValues[A]:
@@ -85,36 +261,72 @@ def ID3Algorithm(examplesSet, label, attributes):
         #Let Sv be the subset of examples in S with A = v
         Sv = list()
         for example in examplesSet:
-            if example[AColumn] == value:
+            if example[AttributeColumn] == value:
                 Sv.append(example)
 
-        print(Sv)
-        print('---')
 
+        #If Sv is empty:
         if not Sv:
             #Add leaf node with the most common value of Label in S
-            print("add leaf node here")
+            leaf = findMostCommonLabelInS(examplesSet)
+            child.nextTree = leaf
         else:
             #Below this branch add the next subtree
             labelPrediction = predictLabel(Sv)
-            #
-            #ID3(Sv, labelPrediction, attributes)
+            #Remove attribute A from all attributes
+            newAttributes = copy.deepcopy(attributes)
+            newAttributes[attributes.index(A)] = -1
+            child.nextTree = ID3Algorithm(Sv, labelPrediction, newAttributes)
+    #Return Root node
+    return root
 
+'''
+Returns the index of the attribute
+'''
+def getIndex(attribute, attributes):
+    for i in range(6):
+        if attribute == attributes[i]:
+            return i
+'''
+Returns the a predicted label based on the decision tree given
+'''
+def decisionTreePrediction(example, root, attributes):
+    ##If reached a leaf node, return the label
+    if isinstance(root, str):
+        return root
+
+    attribute = root.attribute
+    i = getIndex(attribute, attributes)
+    testValue = example[i]
+    for child in root.children:
+            if child.branch == testValue:
+                return decisionTreePrediction(example, child.nextTree, attributes)
 
 def main():
-    list1 = ['low', 'vhigh', '4', '4', 'big', 'med', 'acc']
-    list2 = ['med', 'vhigh', '4', '4', 'big', 'med', 'good']
+    list1 = ['vhigh','high','3','2','big','low','unacc']
+    list2 = ['high', 'low', '4', '4', 'big', 'med', 'vgood']
+    list3 = ['high', 'low', '4', '4', 'big', 'med', 'vgood']
+    list4 = ['high', 'med', '4', '4', 'big', 'med', 'unacc']
+    list5 = ['high', 'low', '4', '4', 'big', 'med', 'vgood']
+
+
     mlist = list()
     mlist.append(list1)
     mlist.append(list2)
+    mlist.append(list3)
+    mlist.append(list4)
+    mlist.append(list5)
+
 
     attributes = ['buying', 'maint', 'doors', 'persons', 'lug_boot', 'safety']
-
     examplesSet = importExamples()
     labelPrediction = predictLabel(mlist)
+    tree = ID3Algorithm(examplesSet, labelPrediction, attributes)
+    print(tree)
 
-    ID3Algorithm(mlist, labelPrediction, attributes)
 
-    print(examplesSet[1][2])
+    print(decisionTreePrediction(list1, tree, attributes))
+
+
 
 main()
