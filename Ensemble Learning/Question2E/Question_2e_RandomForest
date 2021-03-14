@@ -1,0 +1,608 @@
+'''
+Author: Sergio Remigio
+Date: 3/12/2021
+
+
+This file contains the implementation of the ID3 algorithm and bagged trees
+for creating a RandomForest.
+The tests ran here provide the bias term, the variance term, and the squared error
+for single and bagged trees Random Forest.
+'''
+import csv
+import math
+import copy
+import random
+
+maximumTreeDepth = 16
+maximumAttributeSubsetSize = 2
+
+allAttributesWithValues = {
+        "age": [38, 38.0000000001],
+        "job": ["admin.", "unknown", "unemployed", "management", "housemaid", "entrepreneur", "student",
+                "blue-collar", "self-employed", "retired", "technician", "services"],
+        "marital": ["married", "divorced", "single"],
+        "education": ["unknown", "secondary", "primary", "tertiary"],
+        "default": ["yes", "no"],
+        "balance": [453, 453.500000001],
+        "housing": ["yes", "no"],
+        "loan": ["yes", "no"],
+        "contact": ["unknown", "telephone", "cellular"],
+        "day": [16, 16.0000000001],
+        "month": ["jan", "feb", "mar", "apr", "may", "jun",
+                  "jul", "aug", "sep", "oct", "nov", "dec"],
+        "duration": [180, 180.0000000001],
+        "campaign": [2, 2.0000000001],
+        "pdays": [-1, -0.9999999999],
+        "previous": [0, 0.0000000001],
+        "poutcome": ["unknown", "other", "failure", "success"]
+    }
+
+
+
+def isInteger(x):
+    try:
+        int(x)
+        return True
+    except ValueError:
+        return False
+
+
+
+'''
+Children list is a list of all of the
+'''
+class Tree:
+    def __init__(self):
+        self.children = list()
+        self.attribute = None
+        self.branch = None
+        self.nextTree = None
+
+'''
+Given a set, returns a list containing
+the probabilities of every label in order:
+1. "yes"
+2. "no"
+'''
+def findProbabilitiesOfLabels(examplesSet):
+
+    labelsCount = {
+    "yes": 0,
+    "no": 0
+    }
+    probOfLabels = list()
+
+    if isinstance(examplesSet[0], list):
+        totalCount = len(examplesSet)
+
+        for example in examplesSet:
+            nextLabel = example[16]
+            labelsCount[nextLabel] += 1
+
+    #There is only one example in the set
+    else:
+        totalCount = 1
+        nextLabel = examplesSet[16]
+        labelsCount[nextLabel] += 1
+
+
+    for label in labelsCount.keys():
+        labelProbability = (labelsCount[label] / totalCount)
+        probOfLabels.append(labelProbability)
+
+    return probOfLabels
+
+'''
+Entropy{p1, p2, ..., pk} = -(\sum_{i=1}(pilog_4(pi)))
+where p = the probability of kth label
+(i.e., probability of "unacc", "acc".. etc.)
+'''
+def findEntropy(examplesSet):
+    pk = findProbabilitiesOfLabels(examplesSet)
+
+    result = 0
+    for p in pk:
+        if p != 0:
+            result = result + (p * math.log(p,2.0))
+
+    result = -result
+
+    return result
+
+'''
+Returns a Dictionary of size n attributes containing:
+A dictionary of values of a single attribute with a list of
+all example subsets for that attribute
+'''
+def getValueSubsetsForEveryAttribute(examplesSet, attributes):
+    dict = {}
+
+    #Loop through all of the examples for all attributes
+    #and fill dictionary in with subsets of all value examples
+    for i in range(16):
+        if attributes[i] != -1:
+            #Dictionary containing a subset(list of examples) for every value in attributes
+            valueSubSets = {}
+
+            #Create empty dictionary that will hold an attribute(key) and subset examples(value)
+            for value in allAttributesWithValues[attributes[i]]:
+                valueSubSets.update({value: list()})
+
+
+
+            # Fill the dictionary
+            # The example is a numeric type
+            for example in examplesSet:
+                if isInteger(example[i]):
+                    currNum = int(example[i])
+
+                    upperBound = allAttributesWithValues[attributes[i]][0]
+                    lowerBound = allAttributesWithValues[attributes[i]][1]
+                    if currNum <= upperBound:
+                        valueSubSets[upperBound].append(example)
+                    if currNum > lowerBound:
+                        valueSubSets[lowerBound].append(example)
+                else:
+                    valueSubSets[example[i]].append(example)
+
+            #update dict to return later
+            dict.update({attributes[i]: valueSubSets})
+
+    return dict
+
+
+
+'''
+Returns the best attribute to split the example set on
+using Entropy
+'''
+def findBestAttributeToSplitOnEntroypy(examplesSet, attributes):
+    currentEntropy = findEntropy(examplesSet)
+
+    listOfGainsToCalculate = getValueSubsetsForEveryAttribute(examplesSet, attributes)
+    largestGain = 0
+    bestAttribute = None
+    #Return a random attribute if all are the same
+    for x in range(16):
+        if attributes[x] != -1:
+            bestAttribute = attributes[x]
+
+    for attribute in listOfGainsToCalculate.keys():
+        gain = 0
+        for value in listOfGainsToCalculate[attribute].keys():
+            valueSubSet = listOfGainsToCalculate[attribute][value]
+            numerator = len(valueSubSet)
+            denominator = 0
+            for attributeValue in listOfGainsToCalculate[attribute].keys():
+                denominator = denominator + len(listOfGainsToCalculate[attribute][attributeValue])
+            weight = numerator / denominator
+            if not valueSubSet:
+                continue
+            gain = gain + (weight * findEntropy(valueSubSet))
+        #Return a random attribute if all atributes have 0 gain
+        gain = currentEntropy - gain
+        if gain > largestGain:
+            largestGain = gain
+            bestAttribute = attribute
+    return bestAttribute
+
+
+def importExamples(file):
+    examplesSet = list()
+
+    with open(file, 'r') as f:
+        for line in f:
+            terms = line.strip().split(',')
+            examplesSet.append(terms)
+    return examplesSet
+
+
+def predictLabel(set):
+    allLabels = list(('yes', 'no'))
+    prediction = 'no'
+
+    for label in allLabels:
+        allSame = True
+        for example in set:
+            if example[16] != label:
+                allSame = False
+                break
+        if allSame == True:
+            prediction = label
+            break
+    return prediction
+
+
+def checkAllSameLabel(examplesSet, label):
+    for example in examplesSet:
+        if example[16] != label:
+            return False
+    return True
+
+
+'''
+Returns the most common label in the given examples.
+'''
+def findMostCommonLabelInS(examplesSet):
+    labelsCount = {
+    "yes": 0,
+    "no": 0
+    }
+
+    for example in examplesSet:
+        nextLabel = example[16]
+        labelsCount[nextLabel] += 1
+
+    mostCommonLabel = "yes"
+    for nextLabel in labelsCount.keys():
+        if labelsCount[mostCommonLabel] < labelsCount[nextLabel]:
+            mostCommonLabel = nextLabel
+
+    return mostCommonLabel
+
+'''
+Counts the number of -1 in the
+attributes list as that correlates to the
+the current tree depth
+'''
+def getTreeDepth(attributes):
+    depth = 0
+    for attribute in attributes:
+        if attribute == -1:
+            depth = depth + 1
+
+    return depth
+
+
+'''
+Returns a random subset of attributes based on the 
+global variable maximumAttributeSubsetSize. 
+
+Expects to never receive an empty attribute list
+'''
+def getNewAttributesSubset(attributes):
+    randomAttributes = list()
+    attributesCopy = copy.deepcopy(attributes)
+    random.shuffle(attributesCopy)
+    for i in range(16):
+        if attributesCopy[i] != -1:
+            randomAttributes.append(attributesCopy[i])
+            if len(randomAttributes) == maximumAttributeSubsetSize:
+                break
+    newAttributes = list()
+    for i in range(16):
+        newAttributes.append(-1)
+    for attribute in randomAttributes:
+        attributeIndex = getIndex(attribute, attributes)
+        newAttributes[attributeIndex] = attribute
+
+    return newAttributes
+
+
+'''
+Decision tree algorithm
+s: the set of Examples
+Label: the target attribute(the prediction)
+Attributes: the set of measured attributes
+'''
+def ID3Algorithm(examplesSet, label, attributes):
+    #Checks whether maximum depth has been reached
+    treeDepth = getTreeDepth(attributes)
+    if treeDepth == maximumTreeDepth:
+        #Return a leaf node with the most common label
+        leaf = findMostCommonLabelInS(examplesSet)
+        return leaf
+
+    #if all examples have the same label
+    if checkAllSameLabel(examplesSet, label) == True:
+        #If attributes empty
+        if not attributes:
+            #Return a leaf node with the most common label
+            leaf = findMostCommonLabelInS(examplesSet)
+            return leaf
+
+        #else return a leaf node with the label
+        return label
+
+    #Create a root node for tree
+    root = Tree()
+
+    newAttributes = getNewAttributesSubset(attributes)
+
+    A = findBestAttributeToSplitOnEntroypy(examplesSet, newAttributes)
+    AttributeColumn = list(allAttributesWithValues.keys()).index(A)
+    root.attribute = A
+
+
+
+    #For each possible value v of that A can take:
+    for value in allAttributesWithValues[A]:
+        child = Tree()
+        # Add a new tree branch corresponding to A=v
+        child.branch = value
+        root.children.append(child)
+        Sv = list()
+        if isinstance(value, str):
+            # Let Sv be the subset of examples in S with A = v
+            for example in examplesSet:
+                if example[AttributeColumn] == value:
+                    Sv.append(example)
+        # This means the value is a numeric type
+        else:
+            # If the value tag is an int, then we check for example values less or equal to the value tag.
+            if isinstance(value, int):
+                for example in examplesSet:
+                    if int(example[AttributeColumn]) <= value:
+                        Sv.append(example)
+            # If the value tag is an float, then we check for example values greater than the value tag.
+            if isinstance(value, float):
+                for example in examplesSet:
+                    if int(example[AttributeColumn]) > value:
+                        Sv.append(example)
+
+
+        #If Sv is empty:
+        if not Sv:
+            #Add leaf node with the most common value of Label in S
+            leaf = findMostCommonLabelInS(examplesSet)
+            child.nextTree = leaf
+        else:
+            #Below this branch add the next subtree
+            labelPrediction = predictLabel(Sv)
+            #Remove attribute A from all attributes
+            newAttributes = copy.deepcopy(attributes)
+            newAttributes[attributes.index(A)] = -1
+            child.nextTree = ID3Algorithm(Sv, labelPrediction, newAttributes)
+    #Return Root node
+    return root
+
+'''
+Returns the index of the attribute
+'''
+def getIndex(attribute, attributes):
+    for i in range(16):
+        if attribute == attributes[i]:
+            return i
+'''
+Returns the a predicted label based on the decision tree given
+'''
+def decisionTreePrediction(example, root, attributes):
+    ##If reached a leaf node, return the label
+    if isinstance(root, str):
+        return root
+
+    # Attribute that was split on
+    attribute = root.attribute
+    # Column of the attribute that was split on
+    i = getIndex(attribute, attributes)
+    testValue = example[i]
+    # Check every child to see what path the example must take in the decision tree
+    for child in root.children:
+        if isinstance(child.branch, int):
+            if int(testValue) <= child.branch:
+                return decisionTreePrediction(example, child.nextTree, attributes)
+        elif isinstance(child.branch, float):
+            if int(testValue) > child.branch:
+                return decisionTreePrediction(example, child.nextTree, attributes)
+        else:
+            if child.branch == testValue:
+                return decisionTreePrediction(example, child.nextTree, attributes)
+
+
+def findAveragePredictionError(decisionTree, examplesSet, attributes):
+    totalCorrect = 0
+    for example in examplesSet:
+        actualResult = example[16]
+        prediction = decisionTreePrediction(example, decisionTree, attributes)
+        if prediction == actualResult:
+            totalCorrect = totalCorrect + 1
+
+    return totalCorrect / len(examplesSet)
+
+'''------------------------------Bagged Decision Tree Methods below---------------------------------------'''
+
+'''
+T predicitons are made and the most common prediction is returned
+'''
+def findAverageVote(listOfDecisionTrees, example, attributes):
+    yesVotes = 0
+    noVotes = 0
+    for decisionTree in listOfDecisionTrees:
+        prediction = decisionTreePrediction(example, decisionTree, attributes)
+        if prediction == 'yes':
+            yesVotes = yesVotes + 1
+        if prediction == 'no':
+            noVotes = noVotes + 1
+    if yesVotes > noVotes:
+        return 'yes'
+    return 'no'
+
+'''
+Returns prediction success after guessing every result in the examples set 
+'''
+def findAveragePredictionSuccessBagged(listOfDecisionTrees, examplesSet, attributes):
+    totalCorrect = 0
+    for example in examplesSet:
+        actualResult = example[16]
+        votedPrediction = findAverageVote(listOfDecisionTrees, example, attributes)
+        if votedPrediction == actualResult:
+            totalCorrect = totalCorrect + 1
+
+    return totalCorrect / len(examplesSet)
+
+
+'''
+Draw m samples uniformly with replacement from the
+training set (i.e. a bootstrap sample)
+'''
+def getListOfTExamples(T, examplesSet, m):
+    TSamples = list()
+    for i in range(T):
+        bootSample = list()
+        for j in range(m):
+            nextExample = examplesSet[random.randint(0, m - 1)]
+            bootSample.append(nextExample)
+
+        TSamples.append(bootSample)
+    return TSamples
+
+
+'''
+Returns a decision tree for every T sample
+'''
+def getListOfDecisionTrees(listOfTSamples, attributes):
+    listOfDecisionTrees = list()
+    for sample in listOfTSamples:
+        labelPrediction = predictLabel(sample)
+        newDecisionTree = ID3Algorithm(sample, labelPrediction, attributes)
+        listOfDecisionTrees.append(newDecisionTree)
+    return listOfDecisionTrees
+
+
+'''---------------Methods for: Bias, Variance, Squared Error Calculations below--------------'''
+
+
+def create100BaggedTrees(examplesSet, attributes):
+    _100BaggedTrees = list()
+    for i in range(100):
+        T = 500
+        listOfTSamples = getListOfTExamples(T, examplesSet, 1000)
+        baggedTree = getListOfDecisionTrees(listOfTSamples, attributes)
+        _100BaggedTrees.append(baggedTree)
+        print(len(_100BaggedTrees))
+    return _100BaggedTrees
+
+
+def get100SingleTrees(_100BaggedTrees):
+    _100SingleTrees = list()
+    # The first single tree of every BaggedTree is picked
+    for i in range(100):
+        _100SingleTrees.append(_100BaggedTrees[i][0])
+    return _100SingleTrees
+
+
+'''
+A yes in a prediction will be counted as a 1 and 
+a no in a prediction will be counted as a 0
+'''
+def getPredictionOf100SingleTrees(_100SingleTrees, example, attributes):
+    listOfPredictions = list()
+    for tree in _100SingleTrees:
+        prediction = decisionTreePrediction(example, tree, attributes)
+        if prediction == 'yes':
+            listOfPredictions.append(1)
+        else:
+            listOfPredictions.append(0)
+    return listOfPredictions
+
+'''
+A yes in a prediction will be counted as a 1 and 
+a no in a prediction will be counted as a 0
+'''
+def getPredictionOf100BaggedTrees(_100BaggedTrees, example, attributes):
+    listOfPredictions = list()
+    for baggedTree in _100BaggedTrees:
+        prediction = findAverageVote(baggedTree, example, attributes)
+        if prediction == 'yes':
+            listOfPredictions.append(1)
+        else:
+            listOfPredictions.append(0)
+    return listOfPredictions
+
+'''
+allPredictions is a list of numbers either 1 for 
+true and 0 for false
+'''
+def getAverageOfAllValues(listValues):
+    total = 0
+    for value in listValues:
+        total = total + value
+    return total/len(listValues)
+
+
+def getGroundTruthLabel(example):
+    if example[16] == 'yes':
+        return 1
+    return 0
+
+
+'''
+variance is the square root of (sum of the differences between the sample mean and the calculated value(xi) squared 
+divided by (n - 1))
+'''
+def getVariance(allPredictions, averagePrediction, n):
+    # Sum of the differences between the sample mean and the calculated value(xi) squared
+    result = 0
+    for xi in allPredictions:
+        result = result + (xi - averagePrediction)**2
+    # Divided by (n-1)
+    result = result / (n - 1)
+    # Square root
+    result = math.sqrt(result)
+    return result
+
+
+def singleTreesResults(_100SingleTrees, examplesSet, attributes):
+    allBiasTerms = list()
+    allVarianceTerms = list()
+    for example in examplesSet:
+        allPredictions = getPredictionOf100SingleTrees(_100SingleTrees, example, attributes)
+        averagePrediction = getAverageOfAllValues(allPredictions)
+        groundTruthLabel = getGroundTruthLabel(example)
+        biasTerm = (averagePrediction - groundTruthLabel)**2
+        varianceTerm = getVariance(allPredictions, averagePrediction, 100)
+
+        allBiasTerms.append(biasTerm)
+        allVarianceTerms.append(varianceTerm)
+
+    averageBiasTerm = getAverageOfAllValues(allBiasTerms)
+    averageVarianceTerm = getAverageOfAllValues(allVarianceTerms)
+    generalSquaredError = averageBiasTerm + averageVarianceTerm
+    print("Average bias term for single trees: " + str(averageBiasTerm))
+    print("Average variance term for single trees: " + str(averageVarianceTerm))
+    print("General Squared Error for single trees: " + str(generalSquaredError))
+
+
+
+def baggedTreesResults(_100BaggedTrees, examplesSet, attributes):
+    allBiasTerms = list()
+    allVarianceTerms = list()
+    for example in examplesSet:
+        allPredictions = getPredictionOf100BaggedTrees(_100BaggedTrees, example, attributes)
+        averagePrediction = getAverageOfAllValues(allPredictions)
+        groundTruthLabel = getGroundTruthLabel(example)
+        biasTerm = (averagePrediction - groundTruthLabel)**2
+        varianceTerm = getVariance(allPredictions, averagePrediction, 100)
+
+        allBiasTerms.append(biasTerm)
+        allVarianceTerms.append(varianceTerm)
+
+    averageBiasTerm = getAverageOfAllValues(allBiasTerms)
+    averageVarianceTerm = getAverageOfAllValues(allVarianceTerms)
+    generalSquaredError = averageBiasTerm + averageVarianceTerm
+    print("Average bias term for bagged trees: " + str(averageBiasTerm))
+    print("Average variance term for bagged trees: " + str(averageVarianceTerm))
+    print("General Squared Error for bagged trees: " + str(generalSquaredError))
+
+
+def main():
+    attributes = ['age', 'job', 'marital', 'education', 'default', 'balance'
+                      , 'housing', 'loan', 'contact', 'day', 'month', 'duration', 'campaign'
+                      , 'pdays', 'previous', 'poutcome']
+    examplesSet = importExamples('train.csv')
+    testExamplesSet = importExamples('test.csv')
+
+    for i in range(1, 4):
+        global maximumAttributeSubsetSize
+        maximumAttributeSubsetSize = i * 2
+        print("Maximum attribute subset size: " + str(maximumAttributeSubsetSize))
+        _100BaggedTrees = create100BaggedTrees(examplesSet, attributes)
+        _100SingleTrees = get100SingleTrees(_100BaggedTrees)
+
+        singleTreesResults(_100SingleTrees, testExamplesSet, attributes)
+        baggedTreesResults(_100BaggedTrees, testExamplesSet, attributes)
+
+
+main()
+
+
